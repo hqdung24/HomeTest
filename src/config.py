@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env from project root
+# Load .env from project root (only OPENAI_API_KEY)
 PROJECT_ROOT = Path(__file__).parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -13,11 +13,11 @@ DATA_DIR = PROJECT_ROOT / "data"
 ARTICLES_DIR = DATA_DIR / "articles"
 STATE_FILE = DATA_DIR / "state.json"
 
-# Zendesk
-ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN", "optisigns")
-ZENDESK_API_KEY = os.getenv("ZENDESK_API_KEY")
+# Zendesk 
+ZENDESK_SUBDOMAIN = "support.optisigns"
+ZENDESK_API_KEY = None  # Not required for public Help Center
 
-# OpenAI
+# OpenAI 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = "gpt-4o-mini"
 
