@@ -42,7 +42,7 @@ class SpacesClient:
             logger.warning(f"Spaces download failed for {key}: {e}")
             return None
 
-    def upload_text(self, key: str, text: str, content_type: str = "text/plain", public: bool = False):
+    def upload_text(self, key: str, text: str, content_type: str = "text/plain", public: bool = True):
         """Upload a text object."""
         params = {
             "Bucket": self.bucket,
@@ -55,7 +55,7 @@ class SpacesClient:
 
         self.client.put_object(**params)
 
-    def upload_json(self, key: str, payload, public: bool = False):
+    def upload_json(self, key: str, payload, public: bool = True):
         """Upload JSON payload with indentation."""
         body = json.dumps(payload, indent=2)
         self.upload_text(key, body, content_type="application/json", public=public)
@@ -64,5 +64,5 @@ class SpacesClient:
         """Append text to existing file. Downloads current, appends, re-uploads."""
         current = self.download_text(key) or ""
         updated = current + text
-        self.upload_text(key, updated, content_type=content_type)
+        self.upload_text(key, updated, content_type=content_type, public=True)
 
