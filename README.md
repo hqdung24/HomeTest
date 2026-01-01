@@ -1,4 +1,4 @@
-# cryptic-repo-name
+# Home Test Readme
 
 > Zendesk Help Center scraper → OpenAI vector store uploader. Runs once, exits 0.
 
