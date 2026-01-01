@@ -1,81 +1,29 @@
 # cryptic-repo-name
-
-A Python-based system for scraping Zendesk articles and uploading them to OpenAI vector store.
-
-## Project Structure
-
-```
-cryptic-repo-name/
-├─ src/
-│  ├─ scraper/          # Zendesk scraping logic
-│  ├─ openai/           # OpenAI vector store integration
-│  ├─ jobs/             # Main job entrypoint
-│  └─ utils/            # Utility functions
-├─ data/
-│  ├─ articles/         # Generated markdown files
-│  └─ state.json        # Hash tracking
-├─ scripts/
-│  └─ run_local.py      # Local development helper
-└─ Configuration files
-```
+> Zendesk Help Center scraper → OpenAI vector store uploader. Runs once, exits 0.
 
 ## Setup
+- Copy env: `cp .env.sample .env` then set `OPENAI_API_KEY=...` (only required key for local).
+- Optional Spaces S3: set `SPACES_ENDPOINT, SPACES_REGION, SPACES_BUCKET, SPACES_KEY, SPACES_SECRET` if you want remote state/logs.
+- Install deps: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
 
-### 1. Create Virtual Environment
+## Run Locally
+- Python: `python -m src.jobs.main` (uses `.env`, writes state/logs to `data/`).
+- Docker build: `docker build -t optibot:latest .`
+- Docker run (no volume, runs once, exits 0):
+  ```bash
+  docker run --rm -e OPENAI_API_KEY=$OPENAI_API_KEY optibot:latest
+  ```
+- With local persistence: `docker run --rm -e OPENAI_API_KEY=$OPENAI_API_KEY -v $(pwd)/data:/app/data optibot:latest`
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
+## Deploy as Daily DigitalOcean Job
+- Push image: `docker push registry.digitalocean.com/hometest/optibot:latest`.
+- Job command: `python -m src.jobs.main`.
+- Set envs in DO: at least `OPENAI_API_KEY`; add `SPACES_*` for remote state/logs.
+- Daily log (Spaces CDN): https://hometest.sfo3.cdn.digitaloceanspaces.com/logs/run.log
 
-### 2. Install Dependencies
+## Repo Hygiene
+- Keep secrets out of git; `.env.sample` lists required keys.
+- Repo name is intentionally non-obvious; no hard-coded keys.
 
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Configure Environment
-
-```bash
-cp .env.sample .env
-# Zendesk: No auth needed! Using public Help Center API
-# Only add OPENAI_API_KEY from https://platform.openai.com/api-keys
-```
-
-### 4. Test Zendesk Connection
-
-```bash
-source .venv/bin/activate
-python scripts/test_zendesk.py
-```
-
-Expected output: 50 articles fetched from support.optisigns.com/hc/en-us
-
-### 5. Run Locally
-
-```bash
-python scripts/run_local.py
-```
-
-## Docker Deployment
-
-Build and run with Docker:
-
-```bash
-docker build -t cryptic-repo .
-docker run cryptic-repo
-```
-
-## API Configuration
-
-- **Zendesk**: Add your API key and subdomain to `.env`
-- **OpenAI**: Add your OpenAI API key to `.env`
-
-## Development
-
-Each module is organized by functionality:
-
-- `scraper/`: Handles Zendesk API calls and article storage
-- `openai/`: Vector embeddings and storage
-- `jobs/`: Orchestration and main execution
-- `utils/`: Shared utilities (slugs, hashing, logging)
+## Screenshot
+- Capture Playground answer with cited article URLs and place at `docs/playground-answer.png` before final delivery.

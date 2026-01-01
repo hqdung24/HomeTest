@@ -9,13 +9,16 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from slugify import slugify
 
+import config
+from utils.spaces import SpacesClient
+
 logger = logging.getLogger(__name__)
 
 
 class ArticleStore:
     """Manage local article storage and state tracking."""
     
-    def __init__(self, articles_dir: str = "data/articles", state_file: str = "data/state.json"):
+    def __init__(self, articles_dir: str = "data/articles", state_file: str = "data/state.json", use_spaces: bool = True):
         """
         Initialize article store.
         
@@ -25,6 +28,16 @@ class ArticleStore:
         """
         self.articles_dir = Path(articles_dir)
         self.state_file = Path(state_file)
+        self.use_spaces = use_spaces and config.SPACES_ENABLED
+        self.state_key = config.SPACES_STATE_KEY
+        self.spaces_client: Optional[SpacesClient] = None
+        if self.use_spaces:
+            try:
+                self.spaces_client = SpacesClient()
+                logger.info(f"Spaces enabled for state sync: bucket={config.SPACES_BUCKET}, key={self.state_key}")
+            except Exception as exc:
+                self.use_spaces = False
+                logger.warning(f"Spaces disabled (init failed): {exc}")
         
         # Create directories if they don't exist
         self.articles_dir.mkdir(parents=True, exist_ok=True)
@@ -44,26 +57,67 @@ class ArticleStore:
             "articles": {}
         }
 
+        # Prefer remote state if Spaces is enabled
+        if self.use_spaces and self.spaces_client:
+            remote_state = self._download_state_from_spaces()
+            if remote_state is not None:
+                loaded = self._backfill_state(remote_state, default_state)
+                if loaded is not None:
+                    logger.info(f"Loaded state from Spaces: {self.state_key}")
+                    return loaded
+
         if self.state_file.exists():
             try:
                 with open(self.state_file, 'r') as f:
                     loaded = json.load(f)
-                    # Backfill any missing keys (for older state files)
-                    for key, value in default_state.items():
-                        loaded.setdefault(key, value)
-                    return loaded
+                    logger.info(f"Loaded state from local file (fallback)")
+                    return self._backfill_state(loaded, default_state) or default_state
             except Exception as e:
                 logger.warning(f"Could not load state file: {e}")
 
+        logger.info("No existing state found, starting fresh")
         return default_state
     
     def _save_state(self):
-        """Save article state to JSON file."""
+        """Save article state to Spaces ONLY (no local save)."""
+        if self.use_spaces and self.spaces_client:
+            try:
+                self.spaces_client.upload_json(self.state_key, self.state)
+                logger.info(f"Saved state to Spaces: {self.state_key}")
+            except Exception as e:
+                logger.error(f"Failed to save state to Spaces: {e}")
+                raise
+        else:
+            # Fallback to local if Spaces not available (dev/testing only)
+            try:
+                with open(self.state_file, 'w') as f:
+                    json.dump(self.state, f, indent=2)
+                logger.warning(f"Saved state to local file (Spaces not enabled)")
+            except Exception as e:
+                logger.error(f"Error saving state locally: {e}")
+                raise
+
+    def _download_state_from_spaces(self) -> Optional[Dict[str, Any]]:
+        """Try to download state JSON from Spaces. Returns dict or None."""
         try:
-            with open(self.state_file, 'w') as f:
-                json.dump(self.state, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving state: {e}")
+            text = self.spaces_client.download_text(self.state_key) if self.spaces_client else None
+            if text is None:
+                return None
+            return json.loads(text)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Failed to download state from Spaces: {e}")
+            return None
+
+    @staticmethod
+    def _backfill_state(loaded: Dict[str, Any], default_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Backfill missing keys for older state payloads."""
+        try:
+            for key, value in default_state.items():
+                loaded.setdefault(key, value)
+            return loaded
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Failed to backfill state: {e}")
+            return None
     
     def save_article(self, article: Dict[str, Any], markdown_content: str) -> bool:
         """
@@ -86,14 +140,12 @@ class ArticleStore:
             file_path = self.articles_dir / f"{slug}.md"
             
             with open(file_path, 'w', encoding='utf-8') as f:
-                # Add metadata header
                 f.write(f"# {article['title']}\n\n")
                 f.write(f"**Source:** [{article['html_url']}]({article['html_url']})\n")
                 f.write(f"**Last Updated:** {article['updated_at']}\n\n")
                 f.write("---\n\n")
                 f.write(markdown_content)
             
-            # Update state
             content_hash = hashlib.md5(markdown_content.encode()).hexdigest()
             
             self.state["articles"][str(article['id'])] = {
@@ -105,7 +157,7 @@ class ArticleStore:
                 "saved_at": datetime.now().isoformat()
             }
             
-            logger.info(f"✓ Saved: {slug}.md")
+            logger.info(f"Saved: {slug}.md")
             return True
         
         except Exception as e:

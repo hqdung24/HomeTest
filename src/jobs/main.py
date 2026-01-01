@@ -14,6 +14,7 @@ from scraper.scrape_articles import ArticleScraper
 from scraper.article_store import ArticleStore
 from openai_service.upload_markdown import OptiBot as OptiBotAssistant
 from utils.logger import setup_logger
+from utils.spaces_logger import setup_spaces_logging
 
 logger = setup_logger("OptiBot-Job")
 
@@ -26,6 +27,13 @@ class OptiBotJob:
         self.start_time = datetime.now()
         self.article_store = ArticleStore()  # Initialize article store
         self.scraper = ArticleScraper(store=self.article_store)
+        
+        # Setup Spaces logging (writes to local log AND S3)
+        self.spaces_log_handler = setup_spaces_logging()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self.spaces_log_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(self.spaces_log_handler)
+        
         logger.info("="*60)
         logger.info("OptiBot - Article Scraping and Indexing Job")
         logger.info(f"Started at {self.start_time.isoformat()}")
@@ -125,37 +133,38 @@ class OptiBotJob:
             
             # Step 2: Upload to vector store
             if not skip_upload:
-                # Only upload changed files (new + updated)
                 changed_files = scrape_summary.get("changed_files", [])
                 if changed_files:
-                    logger.info(f"\n{len(changed_files)} files changed, uploading to vector store...")
                     upload_summary = self.upload_to_vector_store(changed_files=changed_files)
                 else:
-                    logger.info("\nNo files changed, skipping upload")
-                    upload_summary = {"skipped": True, "reason": "no changes"}
+                    upload_summary = {"skipped": True}
             else:
-                logger.info("\nSkipping upload phase (skip_upload=True)")
+                upload_summary = {"skipped": True}
 
-            
-            # Summary
+            # Log summary
             elapsed = datetime.now() - self.start_time
-            logger.info("\n" + "="*60)
-            logger.info("JOB COMPLETED SUCCESSFULLY")
-
+            summary_line = (
+                f"[{self.start_time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"Scraped: {scrape_summary.get('total_fetched', 0)}, "
+                f"Added: {scrape_summary.get('added', 0)}, "
+                f"Updated: {scrape_summary.get('updated', 0)}, "
+                f"Skipped: {scrape_summary.get('skipped', 0)}, "
+                f"Uploaded: {len(scrape_summary.get('changed_files', []))} files, "
+                f"Elapsed: {elapsed.total_seconds():.0f}s"
+            )
+            
+            logger.info(summary_line)
             
             return True
         
         except Exception as e:
             elapsed = datetime.now() - self.start_time
-            logger.error("\n" + "="*60)
-            logger.error("JOB FAILED")
-            logger.error(f"Failed at {datetime.now().isoformat()}")
-            logger.error(f"Elapsed Time: {elapsed.total_seconds():.1f} seconds")
-            logger.error(f"Error: {e}")
-            logger.error("="*60 + "\n")
+            summary_line = (
+                f"[{self.start_time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"JOB FAILED: {str(e)[:80]} (Elapsed: {elapsed.total_seconds():.0f}s)"
+            )
             
-            import traceback
-            logger.debug(traceback.format_exc())
+            logger.error(summary_line)
             
             return False
 
