@@ -28,6 +28,7 @@ build/
 # Data
 data/articles/*.md
 data/state.json
+data/
 
 # OS
 .DS_Store
