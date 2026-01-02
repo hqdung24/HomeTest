@@ -41,17 +41,9 @@ With local persistence (articles & state survive container):
 docker run --rm -e OPENAI_API_KEY=$OPENAI_API_KEY -v $(pwd)/data:/app/data optibot:latest
 ```
 
-## Deploy as Daily DigitalOcean Job
+## Daily Job Logs
 
-- Push image: `docker push registry.digitalocean.com/hometest/optibot:latest`.
-- Job command: `python -m src.jobs.main`.
-- Set envs in DO: at least `OPENAI_API_KEY`; add `SPACES_*` for remote state/logs.
-- Daily log (Spaces CDN): https://hometest.sfo3.cdn.digitaloceanspaces.com/logs/run.log
-
-## Repo Hygiene
-
-- Keep secrets out of git; `.env.sample` lists required keys.
-- Repo name is intentionally non-obvious; no hard-coded keys.
+https://hometest.sfo3.cdn.digitaloceanspaces.com/logs/run.log
 
 ## Screenshot
 
